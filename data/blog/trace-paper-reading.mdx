@@ -1,0 +1,120 @@
+---
+title: 'TRACE: 通过 Adaptation-Aware Probing 发现 Task-Specific 参数，实现持续微调不遗忘'
+date: '2026-06-15'
+tags: ['KDD', 'continual-learning', 'LLM', 'fine-tuning', 'paper-reading']
+draft: false
+summary: 'KDD 2026 论文 TRACE 解读——将 continual fine-tuning 重新定义为 task-specific parameter discovery 问题，用一次短暂的 warm-start probe 找到每个任务的核心参数子集，然后只更新这些参数，从而在持续微调中有效缓解 catastrophic forgetting。'
+---
+
+## 论文信息
+
+**TRACE: Discovering Task-Specific Parameter via Adaptation-Aware Probing for Continual Fine-Tuning**
+
+发表于 KDD 2026，来自吉林大学、复旦大学、Heriot-Watt University 和 University of Trento 的合作。代码开源在 [GitHub](https://github.com/KEAML-JLU/TRACE)。
+
+---
+
+## 要解决什么问题
+
+LLM 在部署后通常需要针对不同任务做 supervised fine-tuning (SFT)。现实场景中，任务是陆续到来的——今天微调代码生成，明天微调医学问答，后天微调数学推理。问题在于，sequential fine-tuning 是一种 destructive update：新任务的梯度会覆盖旧任务学到的参数表示，导致 catastrophic forgetting。
+
+现有的应对方式大致有几类：experience replay 需要保存和重放旧数据，计算和存储开销大；LoRA / adapter 为每个任务维护单独的模块，但共享 adapter 会遗忘、独立 adapter 则带来管理复杂度；joint fine-tuning 把所有数据混在一起训，但在 continual setting 下通常拿不到历史数据；regularization 方法（如 EWC）给参数更新加全局约束，但不区分任务相关性。
+
+TRACE 的出发点很直接：**这些方法都没有从根本上解决"无差别覆写"的问题**。与其想办法在覆写之后修补，不如一开始就只更新该更新的参数。
+
+## 核心思路
+
+论文受到了神经科学中 brain functional specialization 的启发——大脑不同区域负责不同功能（颞叶处理听觉、枕叶处理视觉），LLM 的不同层和模块对不同任务的贡献也是不均匀的。已有研究表明 Transformer 中存在大量参数冗余，80% 以上的 neuron 可以被 prune 而不影响性能。
+
+基于此，TRACE 将 continual fine-tuning 重新定义为 **task-specific parameter discovery** 问题：
+
+1. 先用一次短暂的 warm-start fine-tune（仅 1 epoch）对预训练模型做 task-specific 的微调探测
+2. 比较 warm-start 后的模型和原始预训练模型，找到每个任务的 core parameter subset
+3. 在后续的 continual fine-tuning 中，每个任务只更新自己的 core parameters，其余参数 frozen
+
+这个设计的精妙之处在于，warm-start 的目的不是训出一个好模型，而是产生一个足够强的信号来判断"哪些参数对这个任务重要"。
+
+## 两种 Core Parameter 识别策略
+
+TRACE 提供了两种独立的策略来识别 task-specific core parameters，它们从不同角度衡量参数的重要性。
+
+### 策略一：L2-Fisher Importance Scoring (TRACE-LF)
+
+这是一种 **task-local** 的策略，不需要跨任务比较。对每个参数，计算两个指标：
+
+- **L2 norm of parameter change**：warm-start 前后参数变化的幅度，变化越大说明这个参数对任务越"敏感"
+- **Fisher Information**：任务 loss 对该参数扰动的敏感度，Fisher 值越大说明这个参数对任务 performance 越关键
+
+两者做 normalize 后加权求和（默认 alpha=beta=0.5），取 top-r% 的参数作为 core set。
+
+### 策略二：Cosine Similarity Specificity Scoring (TRACE-CS)
+
+这是一种 **task-contrastive** 的策略。核心想法是：如果某个参数在不同任务上的 update direction 差异很大，那它很可能编码了 task-specific knowledge。
+
+具体做法是计算同一参数在不同任务上的 update vector 之间的 cosine similarity，然后用 `1 - average_similarity` 作为 specificity score。score 越高，说明这个参数的更新方向越"独特"于当前任务。
+
+两种策略是互补的：TRACE-LF 关注"这个参数有多重要"，TRACE-CS 关注"这个参数有多独特"。
+
+## Selective Parameter Activation
+
+识别出 core parameters 之后，continual fine-tuning 就变得很直接：对每个任务 T_k，只允许其 core parameter set C_k 中的参数接受梯度更新，其余参数 frozen。值得注意的是，TRACE 允许参数在不同任务之间 reuse——如果某个参数同时是多个任务的 core parameter，它在每个对应任务的训练阶段都可以被更新，不做额外冻结。
+
+这个设计很实用，避免了过度保守导致的 capacity 浪费。
+
+## 实验结果
+
+论文在 5 个 backbone 上做了验证：DeepSeek-R1 (1.5B)、LLaMA2 (7B)、LLaMA3 (8B)、Qwen2.5 (14B)、Qwen3 (32B)。三个 SFT 任务分别是 Code Alpaca（代码生成）、GSM8K-RFT（数学推理）、MedQA（医学问答），对应评测 HumanEval pass@1、GSM8K accuracy、MedQA accuracy。
+
+### 主要结果
+
+TRACE 在所有 backbone 上都一致性地超过了 baselines。几个亮点数据：
+
+- **LLaMA3-8B**：TRACE-CS average score 达到 63.28，比最强 baseline（Sequential LoRA 的 46.33）高出 **+16.95 个百分点**。其中 HumanEval 从 43.29 跳到 61.60（+18.31），GSM8K 从 41.17 跳到 66.03（+24.86）
+- **Qwen2.5-14B**：TRACE-LF 的 HumanEval 从 Sequential LoRA 的 45.73 飙到 73.20（+27.47），average 达到 75.28 vs 62.34（+12.94）
+- **Qwen3-32B**：TRACE-LF 在 HumanEval 上达到 90.90，比 baseline 最高的 75.00 高出 +15.90
+
+整体而言，TRACE-LF 和 TRACE-CS 各有所长，取决于具体任务和模型组合，但两者都稳定地优于所有 baseline。
+
+### Task Order Sensitivity
+
+在 LLaMA3-8B 上测试了 6 种 task permutation，TRACE 的 average score 波动范围是 53.04-62.27（均值 56.54 ± 3.80），说明效果不依赖于特定的任务顺序。这在 continual setting 中很重要——现实中任务顺序由数据到达决定，不可能人工挑选最优排列。
+
+### 长任务序列扩展
+
+将任务从 3 个扩展到 5 个（增加了 MATH 和 Lawyer-Instruct），TRACE-CS 仍然以 average 61.48 领先最强 baseline Sequential LoRA 的 54.66（+6.82）。论文还指出一个有意思的观察：相关任务（GSM8K 和 MATH）的 core parameter set 会有大量 overlap，增加相关任务更像是 rehearsal 而非占用新 capacity，所以 performance 不降反升。
+
+### Cross-Model Transferability
+
+这可能是论文最有意思的实验之一。作者在 LLaMA3-8B 上做 warm-start 识别 core parameters，然后通过 CKA (Centered Kernel Alignment) 做 layer mapping，将 core parameter 信息迁移到架构完全不同的 Qwen2.5-14B 和 Qwen3-32B 上。
+
+结果显示 Transfer-LF/CS 的性能与直接在目标模型上做 TRACE 识别的结果 highly comparable，而且都超过了所有 baseline。这说明 TRACE 发现的不是 model-specific artifact，而是某种 task-centric 的 **functional blueprint**——一个任务的"核心功能参数分布"在不同架构之间是可以迁移的。
+
+这也打开了一个实用的 small-to-large 范式：在 8B 小模型上做廉价的 probing，然后把发现的 core parameters 映射到大模型上指导微调，省去了在大模型上做 warm-start 的算力开销。
+
+## 超参数分析
+
+论文对几个关键超参数做了 sensitivity analysis：
+
+- **Core parameter ratio r**：在 r 属于 [1%, 30%] 范围内都优于 baseline，r=5% 为最优。当 r >= 40% 时性能急剧下降——更新太多低重要度参数反而引入 interference
+- **Warm-start epochs**：1 epoch 最优，增加到 2-3 epoch 后 importance distribution 变得 diffuse，弱化了 task-specific signal
+- **alpha (L2-Fisher 权重)**：alpha=0.5 最优，纯用 L2（alpha=1）或纯用 Fisher（alpha=0）都更差，说明两个信号确实互补
+
+## 个人思考
+
+**优点：**
+
+TRACE 的设计非常 clean。不需要 replay buffer、不需要额外 adapter、不需要 regularization 项，只需要一次短暂的 warm-start probe 就能得到 core parameter mask。整个方法的额外开销主要就是这 K 次 warm-start（K 是任务数，每次只训 1 epoch），相比 continual fine-tuning 本身的成本可以忽略不计。
+
+Cross-model transferability 实验也很有说服力，证明了 task-specific parameter 的结构性存在——不是某个模型的偶然现象，而是 task 本身的某种"指纹"。
+
+**值得进一步探讨的：**
+
+论文目前只测了 3-5 个任务的场景。当任务数量增长到几十甚至上百时，core parameter set 的 union 是否会趋于覆盖整个模型？论文在长序列实验中部分回答了这个问题（相关任务的 overlap 很高），但对于高度异质的任务集合，这个 scaling behavior 还不完全清楚。
+
+另外，当前的 selective activation 是 layer-level 的粒度（选择整个 linear projection 或 LayerNorm），更细粒度的 neuron-level 或 channel-level 的选择是否能进一步提升效果？论文在 related work 中提到了 pruning 文献中 80% neuron 可剪的观察，但自身的选择粒度还比较粗。
+
+最后，warm-start 需要在每个新任务到来时独立跑一次，这在 streaming setting 中是合理的。但如果能基于已有任务的 core parameter 信息做增量式 discovery（比如预判新任务与已有任务的关系），可能会进一步减少 warm-start 的成本。
+
+## 总结
+
+TRACE 提出了一个简洁而有效的框架：把 continual fine-tuning 中的 catastrophic forgetting 问题转化为 task-specific parameter discovery 问题。通过 adaptation-aware probing 找到每个任务的核心参数子集，然后只更新这些参数，在 1.5B 到 32B 规模的多个 LLM 上都展示了显著优于 baseline 的效果。cross-model transferability 的发现也为 resource-efficient 的模型适配提供了新的思路。
