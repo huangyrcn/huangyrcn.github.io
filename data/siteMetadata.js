@@ -6,15 +6,15 @@ const siteMetadata = {
   description: 'Notes on machine learning, NLP, and related topics.',
   language: 'zh-cn',
   theme: 'system', // system, dark or light
-  siteUrl: 'http://localhost:3000',
-  siteRepo: 'https://github.com/huangyrcn/ray-blog',
+  siteUrl: 'https://huangyrcn.github.io',
+  siteRepo: 'https://github.com/huangyrcn/huangyrcn.github.io',
   siteLogo: `${process.env.BASE_PATH || ''}/static/images/logo.png`,
   socialBanner: `${process.env.BASE_PATH || ''}/static/images/twitter-card.png`,
   email: 'huangyrcn@gmail.com',
   github: 'https://github.com/huangyrcn',
   x: 'https://x.com/huangyrcn',
   instagram: 'https://www.instagram.com/huangyrcn/',
-  locale: 'en-US',
+  locale: 'zh-CN',
   // set to true if you want a navbar fixed to the top
   stickyNav: false,
   analytics: {
