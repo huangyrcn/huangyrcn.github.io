@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Personal rclone Google Drive Client</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 5rem;
+         font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
+  h1 { font-size: 1.6rem; margin-bottom: .25rem; }
+  h2 { font-size: 1.1rem; margin-top: 2.2rem; }
+  .meta { opacity: .7; font-size: .9rem; margin-bottom: 2rem; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; }
+  a { color: inherit; }
+  footer { margin-top: 3rem; font-size: .9rem; opacity: .7; }
+</style>
+</head>
+<body>
+<h1>Privacy Policy</h1>
+<p class="meta">Personal rclone Google Drive client &middot; Effective 2026-09-11</p>
+
+<h2>What this application is</h2>
+<p>This is a personal, single-user configuration of <a href="https://rclone.org/">rclone</a>, an open-source
+command-line program, running on computers owned or used by the developer. It uses a private Google OAuth
+client so that the developer can mount and access <strong>their own</strong> Google Drive from their own
+machines. It is not a product, service, or website offered to other people, and it has no user accounts,
+no backend servers, and no shared infrastructure.</p>
+
+<h2>Data it accesses</h2>
+<p>When the developer signs in with their own Google Account, the application requests the Google Drive
+scope (<code>https://www.googleapis.com/auth/drive</code>) so that rclone can list, read, and write files in
+that same account's Drive. Only the Google Account that performs the sign-in is accessed. No other person's
+Google data is requested or received.</p>
+
+<h2>How data is used and stored</h2>
+<ul>
+  <li>Drive file contents are transferred directly between Google's servers and the developer's own computers.
+      They are not sent to any third party, server, or analytics service.</li>
+  <li>The OAuth token issued by Google is stored locally in the rclone configuration file on those computers,
+      with access restricted to the owning operating-system user.</li>
+  <li>A local, temporary file cache may be kept on disk to support the mounted filesystem. It lives only on
+      the developer's own machines.</li>
+  <li>No Google user data is sold, shared, transferred to others, or used for advertising, profiling, or
+      training machine-learning models.</li>
+</ul>
+
+<h2>Limited Use disclosure</h2>
+<p>This application's use and transfer of information received from Google APIs adheres to the
+<a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>,
+including the Limited Use requirements.</p>
+
+<h2>Retention and revocation</h2>
+<p>The stored OAuth token is kept only while the setup is in use, and is deleted when the configuration is
+removed. Access can be revoked at any time at
+<a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>, which immediately
+invalidates the token.</p>
+
+<h2>Contact</h2>
+<p>Questions about this policy: <a href="mailto:huangyrcn@gmail.com">huangyrcn@gmail.com</a></p>
+
+<footer><a href="/">&larr; huangyrcn.github.io</a></footer>
+</body>
+</html>
