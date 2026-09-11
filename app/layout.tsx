@@ -51,6 +51,9 @@ export const metadata: Metadata = {
       'max-snippet': -1,
     },
   },
+  verification: {
+    google: 'n3D9ZxtvuyAu8tlalZUSVgwZMC4GRu9TPKZ7FLqzwZY',
+  },
   twitter: {
     title: siteMetadata.title,
     card: 'summary_large_image',
